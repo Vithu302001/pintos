@@ -64,6 +64,7 @@ static char **read_command_line (void);
 static char **parse_options (char **argv);
 static void run_actions (char **argv);
 static void usage (void);
+int custom_strncmp(const char *str1, const char *str2, int length1, int length2);
 
 #ifdef FILESYS
 static void locate_block_devices (void);
@@ -93,6 +94,11 @@ pintos_init (void)
   /* Greet user. */
   printf ("Pintos booting with %'"PRIu32" kB RAM...\n",
           init_ram_pages * PGSIZE / 1024);
+  printf ("************************************************* \n") ;     
+  printf ("Hello!! , I am your PintOS interactive Shell..... \n");
+  printf ("************************************************* \n") ;     
+
+  
 
   /* Initialize memory system. */
   palloc_init (user_page_limit);
@@ -134,12 +140,117 @@ pintos_init (void)
     run_actions (argv);
   } else {
     // TODO: no command line passed to kernel. Run interactively 
+    #define MAX_INPUT_LENGTH 256
+
+    char user_input[MAX_INPUT_LENGTH]; // this variable is used to store the user input
+
+    bool terminating_var = false; // variable used to end the loop.
+    int input_length = 0; 
+
+    while (1)
+    {
+      if (terminating_var)
+        break;
+
+      
+      printf("CS2043> ");
+      input_length = 0;
+
+      while (1)
+      {
+        user_input[input_length] = (char)input_getc();
+
+        // Check for newline
+        if (user_input[input_length] == '\r')
+        {
+          printf("\n");
+          break;
+        }
+        // Check for backspace and remove last character from buffer
+        else if (user_input[input_length] == '\b')
+        {
+          if (input_length > 0)
+          {
+            printf("\b \b");
+            input_length = input_length-1;
+          }
+          continue;
+        }
+
+        // Print each character to console
+        printf("%c", user_input[input_length]);
+        input_length = input_length+1;
+      }
+
+      if (input_length == 0)
+        continue;
+      
+      if (custom_strncmp(user_input, "shutdown", 8,input_length) == 0) { // shutdown PintOS and close QEMU emulator
+            terminating_var = true; // set the 
+            printf("System is shutting down...\n");
+            shutdown_configure(SHUTDOWN_POWER_OFF); //power off machine if possible.
+
+      }  else if (custom_strncmp(user_input, "whoami", 6,input_length) == 0) { //print user name and index number
+            printf("Vithurshan _ 210676M \n");
+
+      }  else if (custom_strncmp(user_input, "ram", 3,input_length) == 0) {// amount of RAM available for OS usage
+            int available_ram = init_ram_pages * (1 << PGBITS);
+            printf("Available amount of RAM : %d B (%d kB) \n", available_ram,available_ram/1024);
+      } else if (custom_strncmp(user_input, "priority", 8,input_length) == 0) {// thread priority of current thread
+            int priority = thread_get_priority(); // storing the current thread priority
+
+            printf("Current thread priority: %d \n", priority);
+
+      }  else if (custom_strncmp(user_input, "time", 4,input_length) == 0) {// Seconds passed since UNIX epoch
+            int time_var = rtc_get_time();
+            printf("Seconds passed since Unix epoch: %d \n", time_var);
+
+      }  else if (custom_strncmp(user_input, "thread", 6,input_length) == 0) { //Thread stats
+            thread_print_stats();
+
+      } else if (custom_strncmp(user_input, "exit", 4,input_length) == 0) { // leaving interactive shell
+            terminating_var = true;
+            printf("Interactive shell terminated!\n");
+
+      } else if (custom_strncmp(user_input, "help", 4,input_length) == 0) { // show the available commands and their smal description
+            printf("whoami   - Displays name of the user with their index number\n");
+            printf("shutdown - Pintos OS will shutdown and exit the qemu emulator\n");
+            printf("time     - Displays the number of seconds passed since Unix epoch\n");
+            printf("ram      - Display the amount of RAM available for the OS\n");
+            printf("thread   - Displays thread statistics\n");
+            printf("priority - Displays the thread priority of the current thread\n");
+            printf("exit     - Exit the interactive shell\n");
+
+      } else { // display a message if any of the user input command match with supported commands
+            printf("The command you entered not found! \n");
+            printf("use help command to know the available commands...\n");
+      }   
+    }
   }
 
   /* Finish up. */
   shutdown ();
   thread_exit ();
 }
+int custom_strncmp(const char *str1, const char *str2, int str1_length, int str2_length) {
+    int i = 0;
+
+    while (i < str1_length && i < str2_length) {
+        if (str1[i] != str2[i]) {
+            return (unsigned char)str1[i] - (unsigned char)str2[i];
+        }
+        i++;
+    }
+
+    if (i == str1_length && i == str2_length) {
+        return 0;
+    } else if (i == str1_length) {
+        return -1;
+    } else {
+        return 1;
+    }
+}
+
 
 /* Clear the "BSS", a segment that should be initialized to
    zeros.  It isn't actually stored on disk or zeroed by the
