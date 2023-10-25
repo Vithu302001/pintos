@@ -24,6 +24,18 @@ struct  description_file{
 
 //creating structure for PCB(process control block)
 
+struct PCB{
+    pid_t process_id; //PID
 
+    struct list_elem element; //list_elem structure to store element
+    const char *ptr_command_line; 
+    struct thread *ptr_parent_process; // process's parent
+    bool is_exit;
+    int32_t exit_code;
+    bool is_wait;
+    
+    struct semaphore semaphore_wait;  //until the child exit block the process
+
+}
 
 #endif /* userprog/process.h */
