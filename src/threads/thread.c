@@ -464,11 +464,18 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
+
+
+#ifdef USERPROG   //child list init
+  list_init(&t->child_list);
+#endif
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
+#ifdef USERPROG
+    list_init(&t->file_descriptors);
+#endif
 }
-
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
    returns a pointer to the frame's base. */
 static void *
