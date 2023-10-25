@@ -90,18 +90,19 @@ start_process (void * process_Ctrl)
 
   char *ptr_save;
 
-  char *ptr_file = strtok_r(nameFile," ",&ptr_save);
-
-  char ** argv[100];
-
+  char *ptr_file ;
+  ptr_file = strtok_r(nameFile, " ", &ptr_save);
+  char **argv[100];
   int8_t argc = 0 ;
+  
   argv[argc++] = ptr_file;
 
-  char* token = strtok_r(NULL, " ", &ptr_save);
-  while (token != NULL) {
+  char* token ;
+  
+  for (token = strtok_r(NULL, " ", &ptr_save); token != NULL; token = strtok_r(NULL, " ", &ptr_save))
+  {
     argv[argc++] = token;
-    token = strtok_r(NULL, " ", &ptr_save);
-}
+  }
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -137,38 +138,41 @@ ptr_t->ptr_PCB  = ptr_PCB;
 
 void stack_arg(int argc, char *argv[], void **esp)
 {
-  int i, j;
-  char *arg_ptrs[argc];
+  ASSERT(argc >= 0);
 
-  // Push the arguments onto the stack in reverse order
-  for (i = argc - 1; i >= 0; i--) {
-    *esp -= strlen(argv[i]) + 1;
-    arg_ptrs[i] = *esp;
-    memcpy(*esp, argv[i], strlen(argv[i]) + 1);
+  /* placing the argv to the process stack.
+  */
+  int i;
+  int len = 0;
+  void *argv_addr[argc]; 
+  for (i = argc - 1; i >= 0; i--)
+  {
+    len = strlen(argv[i]) + 1; 
+    *esp -= len;
+    memcpy(*esp, argv[i], len);
+    argv_addr[i] = *esp;
   }
 
-  // Word-align the stack pointer
-  *esp = (void *)((unsigned int)(*esp) & 0xfffffffc);
+  // leaving sentinel / word align to seperate argv's from addresses
+  *esp = (void *)((int)*esp & 0xfffffffc);
 
-  // Push a null pointer sentinel
+  // null address at the end of the addresses
   *esp -= 4;
   *((int *)*esp) = 0;
 
-  // Push pointers to the arguments in reverse order
-  for (j = argc - 1; j >= 0; j--) {
+  // stacking argv_addresses
+  for (i = argc - 1; i >= 0; i--)
+  {
     *esp -= 4;
-    *((char **)*esp) = arg_ptrs[j];
+    *((void **)*esp) = argv_addr[i];
   }
 
-  // Push a pointer to the argv array
   *esp -= 4;
-  *((char ***)(*esp)) = *esp + 4;
+  *((void **)*esp) = (*esp + 4);
 
-  // Push the value of argc
   *esp -= 4;
   *((int *)*esp) = argc;
 
-  // Push a fake return address
   *esp -= 4;
   *((int *)*esp) = 0;
 }
@@ -629,3 +633,4 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+
