@@ -1,4 +1,5 @@
 #include "userprog/process.h"
+#include <user/syscall.h>
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -20,6 +21,9 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+
+
+void stack_arg(int argc, char *argv[],void **ptr_stack);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
