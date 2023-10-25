@@ -34,7 +34,7 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
-
+  struct PCB *ptr_PCB = NULL;
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -42,31 +42,86 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+
+// Split the file_name using strtok_r to extract the command and arguments.
+char* ptr_save;
+char* command = strtok_r(file_name, " ", &ptr_save);
+
+// Allocate memory for the process control structure.
+struct PCB * ptr_PCB = palloc_get_page(0);
+
+// Initialize the process control structure's fields.
+ptr_PCB->ptr_parent_process = thread_current();
+ptr_PCB->is_wait = false;
+ptr_PCB->is_exit = false;
+ptr_PCB->exit_code = NULL;
+ptr_PCB->ptr_command_line = fn_copy;
+
+// Initialize a semaphore in the process control structure.
+sema_init(&ptr_PCB->semaphore_wait, 0);
+
+
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy, ptr_PCB);
   if (tid == TID_ERROR)
+  {
     palloc_free_page (fn_copy); 
-  return tid;
+    palloc_free_page(ptr_PCB);
+
+  }else{
+    list_push_back(&(thread_current()->child_processes),&(ptr_PCB->element));
+  }
+  ptr_PCB ->process_id = tid;
+  return ptr_PCB->process_id;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void * process_Ctrl)
 {
-  char *file_name = file_name_;
   struct intr_frame if_;
+
+  struct PCB *ptr_PCB = process_Ctrl;
+  char * nameFile = ptr_PCB->ptr_command_line;
+  
   bool success;
+
+
+  char *ptr_save;
+
+  char *ptr_file = strtok_r(nameFile," ",&ptr_save);
+
+  char ** argv[100];
+
+  int8_t argc = 0 ;
+  argv[argc++] = ptr_file;
+
+  char* token = strtok_r(NULL, " ", &ptr_save);
+  while (token != NULL) {
+    argv[argc++] = token;
+    token = strtok_r(NULL, " ", &ptr_save);
+}
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (ptr_file, &if_.eip, &if_.esp);
+ 
+  //assign process control block to the thread;
+  struct thread *ptr_t = thread_current();
+  if (success) {
+    ptr_PCB->process_id = (pid_t)ptr_t->tid;
+} else {
+    ptr_PCB->process_id = PID_ERROR;
+}
+ptr_t->ptr_PCB  = ptr_PCB;
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  palloc_free_page (nameFile);
   if (!success) 
     thread_exit ();
 
@@ -78,6 +133,45 @@ start_process (void *file_name_)
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
+}
+
+
+void stack_arg(int argc, char *argv[], void **esp)
+{
+  int i, j;
+  char *arg_ptrs[argc];
+
+  // Push the arguments onto the stack in reverse order
+  for (i = argc - 1; i >= 0; i--) {
+    *esp -= strlen(argv[i]) + 1;
+    arg_ptrs[i] = *esp;
+    memcpy(*esp, argv[i], strlen(argv[i]) + 1);
+  }
+
+  // Word-align the stack pointer
+  *esp = (void *)((unsigned int)(*esp) & 0xfffffffc);
+
+  // Push a null pointer sentinel
+  *esp -= 4;
+  *((int *)*esp) = 0;
+
+  // Push pointers to the arguments in reverse order
+  for (j = argc - 1; j >= 0; j--) {
+    *esp -= 4;
+    *((char **)*esp) = arg_ptrs[j];
+  }
+
+  // Push a pointer to the argv array
+  *esp -= 4;
+  *((char ***)(*esp)) = *esp + 4;
+
+  // Push the value of argc
+  *esp -= 4;
+  *((int *)*esp) = argc;
+
+  // Push a fake return address
+  *esp -= 4;
+  *((int *)*esp) = 0;
 }
 
 /* Waits for thread TID to die and returns its exit status.  If
@@ -92,7 +186,51 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+  struct thread *ptr_t = thread_current();
+  struct list_elem *ptr_childElement=NULL;struct PCB *ptr_child_PC = NULL;//find all children process using tid
+  struct list *ptr_child_process_list = &(ptr_t->child_processes );
+
+  if(list_empty(ptr_child_process_list)== false){
+    for (ptr_childElement = list_front(ptr_child_process_list); ptr_childElement != list_end(ptr_child_process_list); ptr_childElement = list_next(ptr_childElement))
+    {
+      struct PCB *ptr_PCB = list_entry(ptr_childElement, struct PCB, element);
+
+      if (ptr_PCB->process_id == child_tid)
+      { 
+        //Finding the child
+        ptr_child_PC = ptr_PCB;
+        break;
+      }
+    }
+  }
+
+  //incase child thread id is null
+  if(ptr_child_PC == NULL){
+    return -1;
+  }else{
+    ptr_child_PC->is_wait = true;
+  }
+
+  //block the process until the child process exit
+  if(ptr_child_PC->is_exit == false){
+    sema_down(&(ptr_child_PC->semaphore_wait));
+  }
+
+  ASSERT(ptr_child_PC->is_exit == true);
+
+  //removing from child process list
+  ASSERT(ptr_childElement);
+  list_remove(ptr_childElement);
+
+
+  ///////
+  int exitCode = ptr_child_PC->exit_code;
+  
+  
+  //make child PCB free
+  palloc_free_page(ptr_child_PC);
+
+  return exitCode;
 }
 
 /* Free the current process's resources. */
@@ -102,6 +240,31 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+
+  //make all child PCB free
+  struct list *ptr_child_process_list = & cur->child_processes;
+  while(list_empty(ptr_child_process_list) == false){
+    struct PCB *ptr_PCB;
+    struct list_elem *ptr_elem = list_pop_front(ptr_child_process_list);
+
+    ptr_PCB = list_entry(ptr_elem,struct PCB,element);
+
+    if(ptr_PCB->is_exit){
+      palloc_free_page(ptr_PCB);
+    }else{
+      ptr_PCB->ptr_parent_process = NULL;
+    }
+
+
+    
+  }
+
+  cur->ptr_PCB->is_exit = true;
+
+  
+  sema_up(&cur->ptr_PCB->semaphore_wait);
+
+  
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
