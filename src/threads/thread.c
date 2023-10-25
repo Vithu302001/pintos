@@ -467,7 +467,7 @@ init_thread (struct thread *t, const char *name, int priority)
 
 
 #ifdef USERPROG   //child list init
-  list_init(&t->child_list);
+  list_init(&t->child_processes);
 #endif
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
