@@ -19,7 +19,7 @@ struct  description_file{
     struct file *ptr_file;
 
   
-}
+};
 
 
 //creating structure for PCB(process control block)
@@ -36,6 +36,6 @@ struct PCB{
     
     struct semaphore semaphore_wait;  //until the child exit block the process
 
-}
+};
 
 #endif /* userprog/process.h */
