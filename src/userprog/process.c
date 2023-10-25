@@ -43,12 +43,11 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
 
-// Split the file_name using strtok_r to extract the command and arguments.
 char* ptr_save;
-char* command = strtok_r(file_name, " ", &ptr_save);
+strtok_r(file_name, " ", &ptr_save);
 
 // Allocate memory for the process control structure.
-struct PCB * ptr_PCB = palloc_get_page(0);
+ptr_PCB = palloc_get_page(0);
 
 // Initialize the process control structure's fields.
 ptr_PCB->ptr_parent_process = thread_current();
@@ -63,7 +62,7 @@ sema_init(&ptr_PCB->semaphore_wait, 0);
 
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy, ptr_PCB);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
   {
     palloc_free_page (fn_copy); 
